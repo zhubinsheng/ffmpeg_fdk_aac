@@ -5,6 +5,8 @@
 #ifndef AUDIODECODER_H
 #define AUDIODECODER_H
 
+#include "PacketQueue.h"
+
 extern "C" {
 //编解码
 #include "libavcodec/avcodec.h"
@@ -19,12 +21,11 @@ extern "C" {
 class FrameDataCallback {
 public:
 	virtual ~FrameDataCallback() { }
-	virtual void onDataArrived() = 0;
+	virtual void
+    onDataArrived(long long int i, char **pString, int pInt[1], int i1, int i2, int i3,
+                  int i4,
+                  int i5) = 0;
 };
-
-typedef struct PacketQueue {
-
-} PacketQueue;
 
 class AudioDecoder {
 public:
@@ -37,11 +38,6 @@ public:
 	void close();
 
 	void decode();
-
-	static void *_decode(void *self) {
-		static_cast<AudioDecoder *>(self)->decode();
-		return nullptr;
-	}
 
 	void setFrameDataCallback(FrameDataCallback *frameDataCallback);
 
@@ -58,6 +54,11 @@ private:
 
 	SwrContext *pSwrContext;
 	uint8_t *pPCM16OutBuf;
+
+	static void *_decode(void *self) {
+		static_cast<AudioDecoder *>(self)->decode();
+		return nullptr;
+	}
 };
 
 

@@ -4,14 +4,17 @@
 
 #include <unistd.h>
 #include "AudioDecoder.h"
+
 #include <jni.h>
+#include <pthread.h>
+#include "Log.h"
 
 AudioDecoder::AudioDecoder(PacketQueue *packetQueue) {
     pPacketQueue = packetQueue;
     pFrameDataCallbackMutex = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
     int ret = pthread_mutex_init(pFrameDataCallbackMutex, nullptr);
     if (ret != 0) {
-        LOGE("audio FrameDataCallbackMutex init failed.\n");
+        ALOGE("audio FrameDataCallbackMutex init failed.\n");
     }
 
     pFrameDataCallback = nullptr;
@@ -32,21 +35,21 @@ bool AudioDecoder::open(unsigned int sampleFreq, unsigned int channels, unsigned
     gSampleFreq = sampleFreq;
 
     int ret;
-    AVCodec *dec = avcodec_find_decoder(AV_CODEC_ID_AAC);
-    LOGI("%s audio decoder name: %s", __FUNCTION__, dec->name);
-    enum AVSampleFormat sample_fmt = AV_SAMPLE_FMT_FLTP;//注意：设置为其他值并不生效
+    AVCodec *dec = avcodec_find_decoder_by_name("libfdk_aac");
+    ALOGI("%s audio decoder name: %s", __FUNCTION__, dec->name);
+    enum AVSampleFormat sample_fmt = AV_SAMPLE_FMT_S16;//注意：设置为其他值并不生效
     int bytesPerSample = av_get_bytes_per_sample(sample_fmt);
 
     pAudioAVCodecCtx = avcodec_alloc_context3(dec);
 
     if (pAudioAVCodecCtx == nullptr) {
-        LOGE("%s AudioAVCodecCtx alloc failed", __FUNCTION__);
+        ALOGE("%s AudioAVCodecCtx alloc failed", __FUNCTION__);
         return false;
     }
 
     AVCodecParameters *par = avcodec_parameters_alloc();
     if (par == nullptr) {
-        LOGE("%s audio AVCodecParameters alloc failed", __FUNCTION__);
+        ALOGE("%s audio AVCodecParameters alloc failed", __FUNCTION__);
         avcodec_free_context(&pAudioAVCodecCtx);
         return false;
     }
@@ -62,55 +65,55 @@ bool AudioDecoder::open(unsigned int sampleFreq, unsigned int channels, unsigned
     avcodec_parameters_to_context(pAudioAVCodecCtx, par);
     avcodec_parameters_free(&par);
 
-    LOGI("%s sample_rate=%d channels=%d bytesPerSample=%d", __FUNCTION__, sampleFreq, channels,
+    ALOGI("%s sample_rate=%d channels=%d bytesPerSample=%d", __FUNCTION__, sampleFreq, channels,
          bytesPerSample);
     ret = avcodec_open2(pAudioAVCodecCtx, dec, nullptr);
     if (ret < 0) {
-        LOGE("%s Can not open audio encoder", __FUNCTION__);
+        ALOGE("%s Can not open audio encoder", __FUNCTION__);
         avcodec_free_context(&pAudioAVCodecCtx);
         return false;
     }
-    LOGI("%s avcodec_open2 audio SUCC", __FUNCTION__);
+    ALOGI("%s avcodec_open2 audio SUCC", __FUNCTION__);
     pFrame = av_frame_alloc();
     if (pFrame == nullptr) {
-        LOGE("%s audio av_frame_alloc failed", __FUNCTION__);
+        ALOGE("%s audio av_frame_alloc failed", __FUNCTION__);
         avcodec_free_context(&pAudioAVCodecCtx);
         return false;
     }
 
     pSwrContext = swr_alloc();
     if (pSwrContext == nullptr) {
-        LOGE("%s swr_alloc failed", __FUNCTION__);
+        ALOGE("%s swr_alloc failed", __FUNCTION__);
         avcodec_free_context(&pAudioAVCodecCtx);
         av_frame_free(&pFrame);
         return false;
     }
 
-    swr_alloc_set_opts(
+    /*swr_alloc_set_opts(
             pSwrContext,
             pAudioAVCodecCtx->channel_layout,
-            AV_SAMPLE_FMT_S16,
+            pAudioAVCodecCtx->sample_fmt,
             pAudioAVCodecCtx->sample_rate,
             pAudioAVCodecCtx->channel_layout,
             pAudioAVCodecCtx->sample_fmt,
             pAudioAVCodecCtx->sample_rate,
             0, nullptr
-    );
+    );*/
 
-    ret = swr_init(pSwrContext);
+    /*ret = swr_init(pSwrContext);
     if (ret != 0) {
-        LOGE("%s swr_init failed", __FUNCTION__);
+        ALOGE("%s swr_init failed %d ", __FUNCTION__, ret);
         avcodec_free_context(&pAudioAVCodecCtx);
         av_frame_free(&pFrame);
         swr_free(&pSwrContext);
         return false;
-    }
+    }*/
 
     pPCM16OutBuf = (uint8_t *) malloc(
             av_get_bytes_per_sample(AV_SAMPLE_FMT_S16) * 1024);
 
     if (pPCM16OutBuf == nullptr) {
-        LOGE("%s PCM16OutBufs malloc failed", __FUNCTION__);
+        ALOGE("%s PCM16OutBufs malloc failed", __FUNCTION__);
         avcodec_free_context(&pAudioAVCodecCtx);
         av_frame_free(&pFrame);
         swr_free(&pSwrContext);
@@ -120,7 +123,7 @@ bool AudioDecoder::open(unsigned int sampleFreq, unsigned int channels, unsigned
     isDecoding = true;
     ret = pthread_create(&decodeThread, nullptr, &AudioDecoder::_decode, (void *) this);
     if (ret != 0) {
-        LOGE("audio decode-thread create failed.\n");
+        ALOGE("audio decode-thread create failed.\n");
         isDecoding = false;
         avcodec_free_context(&pAudioAVCodecCtx);
         av_frame_free(&pFrame);
@@ -141,22 +144,22 @@ void AudioDecoder::close() {
     if (pPCM16OutBuf != nullptr) {
         free(pPCM16OutBuf);
         pPCM16OutBuf = nullptr;
-        LOGI("%s PCM16OutBuf free", __FUNCTION__);
+        ALOGI("%s PCM16OutBuf free", __FUNCTION__);
     }
 
     if (pSwrContext != nullptr) {
         swr_free(&pSwrContext);
-        LOGI("%s SwrContext free", __FUNCTION__);
+        ALOGI("%s SwrContext free", __FUNCTION__);
     }
 
     if (pFrame != nullptr) {
         av_frame_free(&pFrame);
-        LOGI("%s audio Frame free", __FUNCTION__);
+        ALOGI("%s audio Frame free", __FUNCTION__);
     }
 
     if (pAudioAVCodecCtx != nullptr) {
         avcodec_free_context(&pAudioAVCodecCtx);
-        LOGI("%s audio avcodec_free_context", __FUNCTION__);
+        ALOGI("%s audio avcodec_free_context", __FUNCTION__);
     }
 }
 
@@ -175,16 +178,17 @@ void AudioDecoder::decode() {
             usleep(sleepDelta);
             continue;
         }
+        ALOGE("%s 111=%d", __FUNCTION__, ret);
 
         AVPacket *pkt = av_packet_alloc();
         if (pkt == nullptr) {
             usleep(sleepDelta);
             continue;
         }
+        ALOGE("%s 222=%d", __FUNCTION__, ret);
 
-        PACKET_STRUCT *packetStruct;
-        bool isDone = pPacketQueue->Take(packetStruct);
-        if (isDone && packetStruct != nullptr && packetStruct->data != nullptr &&
+        Packet *packetStruct = pPacketQueue->getPacket();
+        if (packetStruct != nullptr && packetStruct->data != nullptr &&
             packetStruct->data_size > 0) {
             ret = av_new_packet(pkt, packetStruct->data_size);
             if (ret < 0) {
@@ -216,7 +220,7 @@ void AudioDecoder::decode() {
         av_packet_free(&pkt);
 
         if (ret < 0) {
-            LOGE("%s Error sending the audio pkt to the decoder ret=%d", __FUNCTION__, ret);
+            ALOGE("%s Error sending the audio pkt to the decoder ret=%d", __FUNCTION__, ret);
             usleep(sleepDelta);
             continue;
         } else {
@@ -227,7 +231,7 @@ void AudioDecoder::decode() {
                     usleep(sleepDelta);
                     continue;
                 } else if (ret < 0) {
-                    LOGE("%s Error receive decoding audio frame ret=%d", __FUNCTION__, ret);
+                    ALOGE("%s Error receive decoding audio frame ret=%d", __FUNCTION__, ret);
                     usleep(sleepDelta);
                     continue;
                 }
@@ -251,15 +255,14 @@ void AudioDecoder::decode() {
                 );
 
                 if (number != pFrame->nb_samples) {
-                    LOGE("%s swr_convert appear problem number=%d", __FUNCTION__, number);
+                    ALOGE("%s swr_convert appear problem number=%d", __FUNCTION__, number);
                 } else {
                     dataLen[0] = pFrame->nb_samples *
                                  av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
                     pthread_mutex_lock(pFrameDataCallbackMutex);
                     if (pFrameDataCallback != nullptr) {
                         //LOGD("%s receive the decode frame size=%d nb_samples=%d", __FUNCTION__, dataLen[0], pFrame->nb_samples);
-                        pFrameDataCallback->onDataArrived(StreamType::AUDIO,
-                                                          (long long) pFrame->pts,
+                        pFrameDataCallback->onDataArrived((long long) pFrame->pts,
                                                           (char **) pcmOut,
                                                           dataLen,
                                                           planeNum,

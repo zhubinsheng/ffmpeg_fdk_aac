@@ -7,6 +7,8 @@ add_library(
 
         SHARED
 
+        src/DecodeFaac.cpp
+        src/PacketQueue.cpp
         src/AudioDecoder.cpp)
 
 set(FFMPEG_INCLUDE_DIR  "${CMAKE_SOURCE_DIR}/include/")
@@ -40,6 +42,9 @@ set_target_properties(swresample PROPERTIES IMPORTED_LOCATION ${lib_src_DIR}/lib
 add_library(swscale SHARED IMPORTED)
 set_target_properties(swscale PROPERTIES IMPORTED_LOCATION ${lib_src_DIR}/libswscale.so)
 
+add_library(fdk-aac SHARED IMPORTED)
+set_target_properties(fdk-aac PROPERTIES IMPORTED_LOCATION ${lib_src_DIR}/libfdk-aac.so)
+
 find_library(log-lib log )
 
 target_link_libraries(faac
@@ -51,4 +56,6 @@ target_link_libraries(faac
         avfilter
         avdevice
         avcodec
+        fdk-aac
+
         ${log-lib} )

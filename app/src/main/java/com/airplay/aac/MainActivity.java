@@ -11,7 +11,7 @@ public class MainActivity extends AppCompatActivity {
 
     // Used to load the 'aac' library on application startup.
     static {
-        System.loadLibrary("aac");
+        System.loadLibrary("faac");
     }
 
     private ActivityMainBinding binding;
