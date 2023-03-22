@@ -4,12 +4,12 @@ plugins {
 
 android {
     namespace 'com.airplay.aac'
-    compileSdk 33
+    compileSdk 32
 
     defaultConfig {
         applicationId "com.airplay.aac"
         minSdk 21
-        targetSdk 33
+        targetSdk 32
         versionCode 1
         versionName "1.0"
 
@@ -47,7 +47,4 @@ android {
 
 dependencies {
 
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.8.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 }

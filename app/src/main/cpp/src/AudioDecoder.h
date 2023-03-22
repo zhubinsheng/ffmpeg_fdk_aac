@@ -38,6 +38,8 @@ public:
 
 	void setFrameDataCallback(FrameDataCallback *frameDataCallback);
 
+	void test();
+
 private:
 	PacketQueue *pPacketQueue;
 	AVCodecContext *pAudioAVCodecCtx;
@@ -56,6 +58,7 @@ private:
 		static_cast<AudioDecoder *>(self)->decode();
 		return nullptr;
 	}
+
 };
 
 

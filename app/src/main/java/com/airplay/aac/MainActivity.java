@@ -1,7 +1,6 @@
 package com.airplay.aac;
 
-import androidx.appcompat.app.AppCompatActivity;
-
+import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
@@ -10,9 +9,8 @@ import com.airplay.aac.databinding.ActivityMainBinding;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
 
     // Used to load the 'aac' library on application startup.
     static {
@@ -34,6 +32,11 @@ public class MainActivity extends AppCompatActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
                 initDecoder();
             }
         }).start();
@@ -46,9 +49,11 @@ public class MainActivity extends AppCompatActivity {
                     inputStreamToByteArray(i);
                 } catch (IOException e) {
                     e.printStackTrace();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
                 }
             }
-        }).start();
+        });
     }
 
     /**
@@ -57,12 +62,13 @@ public class MainActivity extends AppCompatActivity {
      * @param inputStream 输入流对象
      * @return byte数组
      */
-    public void inputStreamToByteArray(InputStream inputStream) throws IOException {
+    public void inputStreamToByteArray(InputStream inputStream) throws IOException, InterruptedException {
         byte[] buffer = new byte[1024];
         int num;
         while ((num = inputStream.read(buffer)) != -1) {
             Log.d("faac", "read: " + buffer.length);
             addPacket(buffer);
+            Thread.sleep(100);
         }
     }
 

@@ -22,12 +22,12 @@ bool PacketQueue::empty()
 Packet * PacketQueue::getPacket() //Gives you back the first packet in the queue and destroys it
 {
     std::lock_guard<std::recursive_mutex> lg(mutex);
-
+    Packet *packetStruct = nullptr;
     if (queue.empty()){
         ALOGE("%s queue empty... ", __FUNCTION__);
-        return nullptr;
+        return packetStruct;
     }
-    Packet *packetStruct = queue.front();
+    packetStruct = queue.front();
     queue.pop();
 
     return packetStruct;

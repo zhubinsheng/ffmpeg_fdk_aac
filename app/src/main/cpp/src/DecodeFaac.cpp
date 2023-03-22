@@ -19,7 +19,8 @@ JNIEXPORT jstring JNICALL
 Java_com_airplay_aac_MainActivity_initDecoder(JNIEnv *env, jobject thiz) {
     packetQueue = new PacketQueue();
     auto *audioDecoder = new AudioDecoder(packetQueue);
-    audioDecoder->open(48000, 1, AOT_ER_AAC_ELD);
+    audioDecoder->test();
+//    audioDecoder->open(48000, 1, AOT_ER_AAC_ELD);
 //    frameDataCallback = new FrameDataCallbackImpl();
 //    audioDecoder->setFrameDataCallback(frameDataCallback);
 
