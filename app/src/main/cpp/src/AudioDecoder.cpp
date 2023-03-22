@@ -9,6 +9,19 @@
 #include <pthread.h>
 #include "Log.h"
 
+// 判断编码器是否支持某个采样格式(采样大小)
+static int check_sample_fmt(const AVCodec *codec, enum AVSampleFormat sample_fmt)
+{
+    const enum AVSampleFormat *p = codec->sample_fmts;
+
+    while (*p != AV_SAMPLE_FMT_NONE) {
+        if (*p == sample_fmt)
+            return 1;
+        p++;
+    }
+    return 0;
+}
+
 AudioDecoder::AudioDecoder(PacketQueue *packetQueue) {
     pPacketQueue = packetQueue;
     pFrameDataCallbackMutex = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
@@ -47,23 +60,22 @@ bool AudioDecoder::open(unsigned int sampleFreq, unsigned int channels, unsigned
         return false;
     }
 
-    AVCodecParameters *par = avcodec_parameters_alloc();
-    if (par == nullptr) {
-        ALOGE("%s audio AVCodecParameters alloc failed", __FUNCTION__);
-        avcodec_free_context(&pAudioAVCodecCtx);
-        return false;
-    }
+//    AVCodecParameters *par = avcodec_parameters_alloc();
+//    if (par == nullptr) {
+//        ALOGE("%s audio AVCodecParameters alloc failed", __FUNCTION__);
+//        avcodec_free_context(&pAudioAVCodecCtx);
+//        return false;
+//    }
+//    avcodec_parameters_to_context(pAudioAVCodecCtx, par);
+//    avcodec_parameters_free(&par);
 
-    par->codec_type = AVMEDIA_TYPE_AUDIO;
-    par->sample_rate = (int) sampleFreq;
-    par->channel_layout = av_get_default_channel_layout((int) channels);
-    par->channels = (int) channels;
-    par->bit_rate = sampleFreq * channels * bytesPerSample;
-    par->format = sample_fmt;
-    par->profile = (int) profile;
 
-    avcodec_parameters_to_context(pAudioAVCodecCtx, par);
-    avcodec_parameters_free(&par);
+    pAudioAVCodecCtx->sample_rate    = (int) sampleFreq;
+    // channel_layout为各个通道存储顺序，可以据此算出声道数。设置声道数也可以直接写具体值
+    pAudioAVCodecCtx->channel_layout = av_get_default_channel_layout((int) channels);
+    pAudioAVCodecCtx->channels       = (int) channels;
+    pAudioAVCodecCtx->profile = FF_PROFILE_AAC_ELD;
+    pAudioAVCodecCtx->codec_type = AVMEDIA_TYPE_AUDIO;
 
     ALOGI("%s sample_rate=%d channels=%d bytesPerSample=%d", __FUNCTION__, sampleFreq, channels,
          bytesPerSample);
@@ -89,7 +101,7 @@ bool AudioDecoder::open(unsigned int sampleFreq, unsigned int channels, unsigned
         return false;
     }
 
-    /*swr_alloc_set_opts(
+    swr_alloc_set_opts(
             pSwrContext,
             pAudioAVCodecCtx->channel_layout,
             pAudioAVCodecCtx->sample_fmt,
@@ -98,16 +110,16 @@ bool AudioDecoder::open(unsigned int sampleFreq, unsigned int channels, unsigned
             pAudioAVCodecCtx->sample_fmt,
             pAudioAVCodecCtx->sample_rate,
             0, nullptr
-    );*/
+    );
 
-    /*ret = swr_init(pSwrContext);
+    ret = swr_init(pSwrContext);
     if (ret != 0) {
         ALOGE("%s swr_init failed %d ", __FUNCTION__, ret);
         avcodec_free_context(&pAudioAVCodecCtx);
         av_frame_free(&pFrame);
         swr_free(&pSwrContext);
         return false;
-    }*/
+    }
 
     pPCM16OutBuf = (uint8_t *) malloc(
             av_get_bytes_per_sample(AV_SAMPLE_FMT_S16) * 1024);
@@ -190,6 +202,10 @@ void AudioDecoder::decode() {
         Packet *packetStruct = pPacketQueue->getPacket();
         if (packetStruct != nullptr && packetStruct->data != nullptr &&
             packetStruct->data_size > 0) {
+
+            ALOGE("%s 333=%d", __FUNCTION__, ret);
+
+
             ret = av_new_packet(pkt, packetStruct->data_size);
             if (ret < 0) {
                 av_packet_free(&pkt);
@@ -261,7 +277,7 @@ void AudioDecoder::decode() {
                                  av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
                     pthread_mutex_lock(pFrameDataCallbackMutex);
                     if (pFrameDataCallback != nullptr) {
-                        //LOGD("%s receive the decode frame size=%d nb_samples=%d", __FUNCTION__, dataLen[0], pFrame->nb_samples);
+                        ALOGD("%s receive the decode frame size=%d nb_samples=%d", __FUNCTION__, dataLen[0], pFrame->nb_samples);
                         pFrameDataCallback->onDataArrived((long long) pFrame->pts,
                                                           (char **) pcmOut,
                                                           dataLen,

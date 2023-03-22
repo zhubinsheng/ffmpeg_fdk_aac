@@ -21,10 +21,7 @@ extern "C" {
 class FrameDataCallback {
 public:
 	virtual ~FrameDataCallback() { }
-	virtual void
-    onDataArrived(long long int i, char **pString, int pInt[1], int i1, int i2, int i3,
-                  int i4,
-                  int i5) = 0;
+	virtual void onDataArrived(long long int i, char **pString, int pInt[1], int i1, int i2, int i3, int i4, int i5) = 0;
 };
 
 class AudioDecoder {

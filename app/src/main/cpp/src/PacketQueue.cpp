@@ -19,13 +19,18 @@ bool PacketQueue::empty()
     return queue.empty();
 }
 
-Packet * PacketQueue::getPacket()
+Packet * PacketQueue::getPacket() //Gives you back the first packet in the queue and destroys it
 {
     std::lock_guard<std::recursive_mutex> lg(mutex);
 
-    Packet * output = queue.front();
+    if (queue.empty()){
+        ALOGE("%s queue empty... ", __FUNCTION__);
+        return nullptr;
+    }
+    Packet *packetStruct = queue.front();
     queue.pop();
-    return output;
+
+    return packetStruct;
 }
 
 std::recursive_mutex& PacketQueue::getMutex()
