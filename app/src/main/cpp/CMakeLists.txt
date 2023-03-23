@@ -59,3 +59,13 @@ target_link_libraries(faac
         fdk-aac
 
         ${log-lib} )
+
+add_library(
+        fdkdec
+        SHARED
+        src/fdkaccdec.cpp
+)
+
+target_link_libraries(fdkdec
+        fdk-aac
+        ${log-lib} )

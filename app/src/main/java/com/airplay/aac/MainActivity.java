@@ -2,6 +2,7 @@ package com.airplay.aac;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.Log;
 import android.widget.TextView;
 
@@ -14,6 +15,7 @@ public class MainActivity extends Activity {
 
     // Used to load the 'aac' library on application startup.
     static {
+        System.loadLibrary("fdkdec");
         System.loadLibrary("faac");
     }
 
@@ -29,6 +31,13 @@ public class MainActivity extends Activity {
         // Example of a call to a native method
         TextView tv = binding.sampleText;
 
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                initFdk();
+            }
+        }, 1000);
+
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -39,7 +48,7 @@ public class MainActivity extends Activity {
                 }
                 initDecoder();
             }
-        }).start();
+        });
 
         new Thread(new Runnable() {
             @Override
@@ -59,7 +68,7 @@ public class MainActivity extends Activity {
                     throw new RuntimeException(e);
                 }
             }
-        }).start();
+        });
     }
 
     /**
@@ -103,5 +112,7 @@ public class MainActivity extends Activity {
     public native void initDecoder();
 
     public native void addPacket(byte[] buffer);
+
+    public native void initFdk();
 
 }
