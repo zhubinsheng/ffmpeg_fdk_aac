@@ -15,12 +15,12 @@ PacketQueue *packetQueue = nullptr;
 FrameDataCallbackImpl *frameDataCallback = nullptr;
 
 extern "C"
-JNIEXPORT jstring JNICALL
+JNIEXPORT void JNICALL
 Java_com_airplay_aac_MainActivity_initDecoder(JNIEnv *env, jobject thiz) {
     packetQueue = new PacketQueue();
     auto *audioDecoder = new AudioDecoder(packetQueue);
-    audioDecoder->test();
-//    audioDecoder->open(48000, 1, AOT_ER_AAC_ELD);
+//    audioDecoder->test();
+    audioDecoder->open(48000, 1, AOT_ER_AAC_ELD);
 //    frameDataCallback = new FrameDataCallbackImpl();
 //    audioDecoder->setFrameDataCallback(frameDataCallback);
 

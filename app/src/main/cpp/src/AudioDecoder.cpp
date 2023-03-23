@@ -49,12 +49,17 @@ AudioDecoder::~AudioDecoder() {
 
 bool AudioDecoder::open(unsigned int sampleFreq, unsigned int channels, unsigned int profile) {
     gSampleFreq = sampleFreq;
+//    const AVCodec *dec = avcodec_find_decoder_by_name("libfdk_aac");
+    const char *outfilename = "/data/data/com.airplay.aac/cache/test0.pcm";
+
+    outfile = fopen(outfilename, "wb");
+    if (!outfile) {
+        ALOGE("%s fopen outfile failed", __FUNCTION__);
+    }
 
     int ret;
-    AVCodec *dec = avcodec_find_decoder_by_name("libfdk_aac");
-    ALOGI("%s audio decoder name: %s", __FUNCTION__, dec->name);
-    enum AVSampleFormat sample_fmt = AV_SAMPLE_FMT_S16;//注意：设置为其他值并不生效
-    int bytesPerSample = av_get_bytes_per_sample(sample_fmt);
+    const AVCodec *dec = avcodec_find_decoder(AV_CODEC_ID_AAC);
+    ALOGI("%s audio decoder name: %s id: %u", __FUNCTION__, dec->name, dec->id);
 
     pAudioAVCodecCtx = avcodec_alloc_context3(dec);
 
@@ -63,25 +68,25 @@ bool AudioDecoder::open(unsigned int sampleFreq, unsigned int channels, unsigned
         return false;
     }
 
-//    AVCodecParameters *par = avcodec_parameters_alloc();
-//    if (par == nullptr) {
-//        ALOGE("%s audio AVCodecParameters alloc failed", __FUNCTION__);
-//        avcodec_free_context(&pAudioAVCodecCtx);
-//        return false;
-//    }
-//    avcodec_parameters_to_context(pAudioAVCodecCtx, par);
-//    avcodec_parameters_free(&par);
-
-
-    pAudioAVCodecCtx->sample_rate    = (int) sampleFreq;
+    AVCodecParameters *par = avcodec_parameters_alloc();
+    if (par == nullptr) {
+        ALOGE("%s audio AVCodecParameters alloc failed", __FUNCTION__);
+        avcodec_free_context(&pAudioAVCodecCtx);
+        return false;
+    }
+    par->sample_rate    = (int) sampleFreq;
     // channel_layout为各个通道存储顺序，可以据此算出声道数。设置声道数也可以直接写具体值
-    pAudioAVCodecCtx->channel_layout = av_get_default_channel_layout((int) channels);
-    pAudioAVCodecCtx->channels       = (int) channels;
-    pAudioAVCodecCtx->profile = FF_PROFILE_AAC_ELD;
-    pAudioAVCodecCtx->codec_type = AVMEDIA_TYPE_AUDIO;
+    par->channel_layout = av_get_default_channel_layout((int) channels);
+    par->channels       = (int) channels;
+//    par->profile = FF_PROFILE_AAC_ELD;
+    par->codec_type = AVMEDIA_TYPE_AUDIO;
+    par->format = AV_SAMPLE_FMT_FLT;
 
-    ALOGI("%s sample_rate=%d channels=%d bytesPerSample=%d", __FUNCTION__, sampleFreq, channels,
-         bytesPerSample);
+    avcodec_parameters_to_context(pAudioAVCodecCtx, par);
+    avcodec_parameters_free(&par);
+
+    ALOGI("%s sample_rate=%d channels=%d", __FUNCTION__, sampleFreq, channels);
+
     ret = avcodec_open2(pAudioAVCodecCtx, dec, nullptr);
     if (ret < 0) {
         ALOGE("%s Can not open audio encoder", __FUNCTION__);
@@ -107,7 +112,7 @@ bool AudioDecoder::open(unsigned int sampleFreq, unsigned int channels, unsigned
     swr_alloc_set_opts(
             pSwrContext,
             pAudioAVCodecCtx->channel_layout,
-            pAudioAVCodecCtx->sample_fmt,
+            AV_SAMPLE_FMT_S16,
             pAudioAVCodecCtx->sample_rate,
             pAudioAVCodecCtx->channel_layout,
             pAudioAVCodecCtx->sample_fmt,
@@ -185,7 +190,7 @@ void AudioDecoder::setFrameDataCallback(FrameDataCallback *frameDataCallback) {
 }
 
 void AudioDecoder::decode() {
-    int ret;
+    int ret = 0;
     unsigned sleepDelta = 1024 * 1000000 / gSampleFreq / 4;// 一帧音频的 1/4
 
     while (isDecoding) {
@@ -193,21 +198,19 @@ void AudioDecoder::decode() {
             usleep(sleepDelta);
             continue;
         }
-        ALOGE("%s 111=%d", __FUNCTION__, ret);
 
         AVPacket *pkt = av_packet_alloc();
         if (pkt == nullptr) {
             usleep(sleepDelta);
             continue;
         }
-        ALOGE("%s 222=%d", __FUNCTION__, ret);
 
         Packet *packetStruct = pPacketQueue->getPacket();
         if (packetStruct != nullptr &&
                 packetStruct->data != nullptr &&
                     packetStruct->data_size > 0) {
 
-            ALOGE("%s 333=%d", __FUNCTION__, ret);
+            ALOGE("%s getPacket size=%d", __FUNCTION__, packetStruct->data_size);
 
             ret = av_new_packet(pkt, packetStruct->data_size);
             if (ret < 0) {
@@ -225,11 +228,11 @@ void AudioDecoder::decode() {
 
         memcpy(pkt->data, packetStruct->data, packetStruct->data_size);
 
-        pkt->pts = packetStruct->timestamp;
-        pkt->dts = packetStruct->timestamp;
-
+//        pkt->pts = packetStruct->timestamp;
+//        pkt->dts = packetStruct->timestamp;
 
         /* send the packet for decoding */
+        /*帧用这个*/
         ret = avcodec_send_packet(pAudioAVCodecCtx, pkt);
         //LOGD("%s send the audio packet for decoding pkt size=%d", __FUNCTION__, pkt->size);
         free(packetStruct->data);
@@ -254,6 +257,7 @@ void AudioDecoder::decode() {
                     usleep(sleepDelta);
                     continue;
                 }
+                ALOGE("%s avcodec_receive_frame ret=%d", __FUNCTION__, ret);
 
                 // 解码固定为 AV_SAMPLE_FMT_FLTP，需要转码为 AV_SAMPLE_FMT_S16
                 // 数据都装在 data[0] 中，而大小则为 linesize[0]（实际发现此处大小并不对，大小计算见下面）
@@ -272,12 +276,19 @@ void AudioDecoder::decode() {
                         (const uint8_t **) pFrame->data,
                         pFrame->nb_samples
                 );
+                int numberofbytespersample = av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
+                ALOGE("%s swr_convert %d %d %d %d", __FUNCTION__, pFrame->nb_samples, number, pFrame->channels, numberofbytespersample);
+                int data_size = av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
+
+                /*test 单声道写入*/
+                int i;
+                for (i = 0; i < pFrame->nb_samples; i++)
+                        fwrite(pcmOut[0] + data_size*i, 1, data_size, outfile);
+
 
                 if (number != pFrame->nb_samples) {
-                    ALOGE("%s swr_convert appear problem number=%d", __FUNCTION__, number);
                 } else {
-                    dataLen[0] = pFrame->nb_samples *
-                                 av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
+                    dataLen[0] = pFrame->nb_samples * numberofbytespersample;
                     pthread_mutex_lock(pFrameDataCallbackMutex);
                     if (pFrameDataCallback != nullptr) {
                         ALOGD("%s receive the decode frame size=%d nb_samples=%d", __FUNCTION__, dataLen[0], pFrame->nb_samples);
@@ -301,6 +312,18 @@ void AudioDecoder::decode() {
 
     }
 }
+
+
+
+
+
+
+/*========================================================
+ * ====test code =====
+ * =======================================================*/
+
+
+
 
 #define AUDIO_INBUF_SIZE 20480
 #define AUDIO_REFILL_THRESH 4096
@@ -344,7 +367,6 @@ static void decode2(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame,
     ret = avcodec_send_packet(dec_ctx, pkt);
     if (ret < 0) {
         ALOGW( "Error submitting the packet to the decoder\n");
-        exit(1);
     }
 
     /* read all the output frames (in general there may be any number of them */
@@ -354,16 +376,14 @@ static void decode2(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame,
             return;
         else if (ret < 0) {
             ALOGW( "Error during decoding\n");
-            exit(1);
         }
         data_size = av_get_bytes_per_sample(dec_ctx->sample_fmt);
         if (data_size < 0) {
             /* This should not occur, checking just for paranoia */
             ALOGW( "Failed to calculate data size\n");
-            exit(1);
         }
         for (i = 0; i < frame->nb_samples; i++)
-            for (ch = 0; ch < 1; ch++)
+            for (ch = 0; ch <  dec_ctx->channels; ch++)
                 fwrite(frame->data[ch] + data_size*i, 1, data_size, outfile);
     }
 }
@@ -375,7 +395,7 @@ void AudioDecoder::test()
     AVCodecContext *c= NULL;
     AVCodecParserContext *parser = NULL;
     int len, ret;
-    FILE *f, *outfile;
+    FILE *f, *outfile2;
     uint8_t inbuf[AUDIO_INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
     uint8_t *data;
     size_t   data_size;
@@ -385,45 +405,60 @@ void AudioDecoder::test()
     int n_channels = 0;
     const char *fmt;
 
-    filename    = "/data/data/com.airplay.aac/cache/output.aac";
+    filename    = "/data/data/com.airplay.aac/cache/69906708177.mp3";
     outfilename = "/data/data/com.airplay.aac/cache/test.pcm";
 
     pkt = av_packet_alloc();
 
-    /* find the MPEG audio decoder */
-    codec = avcodec_find_decoder(AV_CODEC_ID_AAC);
+    codec = avcodec_find_decoder(AV_CODEC_ID_MP3);
     if (!codec) {
         ALOGW( "Codec not found\n");
-        exit(1);
     }
 
     parser = av_parser_init(codec->id);
     if (!parser) {
         ALOGW( "Parser not found\n");
-        exit(1);
     }
+
+//    codec = avcodec_find_decoder_by_name("libfdk_aac");
+    ALOGI("%s audio decoder name: %s id: %u", __FUNCTION__, codec->name, codec->id);
 
     c = avcodec_alloc_context3(codec);
     if (!c) {
         ALOGW( "Could not allocate audio codec context\n");
-        exit(1);
     }
 
     /* open it */
     if (avcodec_open2(c, codec, NULL) < 0) {
         ALOGW( "Could not open codec\n");
-        exit(1);
     }
+
+//    AVFormatContext *fmt_ctx = NULL;
+//    fmt_ctx = avformat_alloc_context();
+//    ret = avformat_open_input(&fmt_ctx, filename, NULL, NULL);
+//    ALOGD("avformat_open_input error,ret= %d" , ret);
+//    if (ret < 0){
+//    }
+//
+//    ret = avformat_find_stream_info(fmt_ctx, NULL);
+//    ALOGD("avformat_find_stream_info error,ret= %d" , ret);
+//    if (ret < 0){
+//    }
+//
+//    for (size_t i = 0; i < fmt_ctx->nb_streams; i++){
+//        if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO){
+//            avcodec_parameters_to_context(c, fmt_ctx->streams[i]->codecpar);
+//        }
+//    }
+//    avformat_close_input(&fmt_ctx);
 
     f = fopen(filename, "rb");
     if (!f) {
         ALOGW( "Could not open %s\n", filename);
-        exit(1);
     }
-    outfile = fopen(outfilename, "wb");
-    if (!outfile) {
+    outfile2 = fopen(outfilename, "wb");
+    if (!outfile2) {
         av_free(c);
-        exit(1);
     }
 
     /* decode until eof */
@@ -434,25 +469,24 @@ void AudioDecoder::test()
         if (!decoded_frame) {
             if (!(decoded_frame = av_frame_alloc())) {
                 ALOGW( "Could not allocate audio frame\n");
-                exit(1);
             }
         }
 
+        /*流用这个*/
         ret = av_parser_parse2(parser, c, &pkt->data, &pkt->size,
                                data, data_size,
                                AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
         if (ret < 0) {
             ALOGW( "Error while parsing\n");
-            exit(1);
         }
         data      += ret;
         data_size -= ret;
-        ALOGW( "Error while parsing %d \n", c->channels);
-        ALOGW( "Error while parsing %d \n", c->sample_fmt);
+        ALOGW( "while decode2 %d %d %d %zu\n", c->channels, c->sample_fmt, pkt->size, data_size);
 
         if (pkt->size)
-            decode2(c, pkt, decoded_frame, outfile);
-
+            decode2(c, pkt, decoded_frame, outfile2);
+//aarch64-linux-android-addr2line -e C:xxx\app\build\intermediates\cmake\debug\obj\armeabi-v7a.so 000bca13
+//1.addr2line接受的参数含义（相对偏移地址）2.传入的地址是否为相对偏移地址（这里是dmesg输出的ip对应地址）。
         if (data_size < AUDIO_REFILL_THRESH) {
             memmove(inbuf, data, data_size);
             data = inbuf;
@@ -462,11 +496,12 @@ void AudioDecoder::test()
                 data_size += len;
         }
     }
+    ALOGW( "flush the decoder %d %d\n", c->channels, c->sample_fmt);
 
     /* flush the decoder */
     pkt->data = NULL;
     pkt->size = 0;
-    decode2(c, pkt, decoded_frame, outfile);
+    decode2(c, pkt, decoded_frame, outfile2);
 
     /* print output pcm infomations, because there have no metadata of pcm */
     sfmt = c->sample_fmt;
@@ -488,7 +523,7 @@ void AudioDecoder::test()
            fmt, n_channels, c->sample_rate,
            outfilename);
     end:
-    fclose(outfile);
+    fclose(outfile2);
     fclose(f);
 
     avcodec_free_context(&c);

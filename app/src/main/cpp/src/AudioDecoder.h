@@ -13,6 +13,8 @@ extern "C" {
 #include "libswresample/swresample.h"
 #include "libavutil/frame.h"
 #include "libavutil/mem.h"
+#include "libavformat/avformat.h"
+#include <libswscale/swscale.h>
 
 #include <jni.h>
 }
@@ -53,6 +55,8 @@ private:
 
 	SwrContext *pSwrContext;
 	uint8_t *pPCM16OutBuf;
+
+	FILE *outfile;
 
 	static void *_decode(void *self) {
 		static_cast<AudioDecoder *>(self)->decode();

@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(10);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
@@ -44,6 +44,12 @@ public class MainActivity extends Activity {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                try {
+                    Thread.sleep(300);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
                 InputStream i = getAssetsStream("test.aac");
                 try {
                     inputStreamToByteArray(i);
@@ -53,7 +59,7 @@ public class MainActivity extends Activity {
                     throw new RuntimeException(e);
                 }
             }
-        });
+        }).start();
     }
 
     /**
@@ -63,12 +69,12 @@ public class MainActivity extends Activity {
      * @return byte数组
      */
     public void inputStreamToByteArray(InputStream inputStream) throws IOException, InterruptedException {
-        byte[] buffer = new byte[1024];
+        byte[] buffer = new byte[20480 * 10];
         int num;
         while ((num = inputStream.read(buffer)) != -1) {
             Log.d("faac", "read: " + buffer.length);
             addPacket(buffer);
-            Thread.sleep(100);
+            Thread.sleep(10);
         }
     }
 
@@ -94,7 +100,7 @@ public class MainActivity extends Activity {
      * A native method that is implemented by the 'aac' native library,
      * which is packaged with this application.
      */
-    public native String initDecoder();
+    public native void initDecoder();
 
     public native void addPacket(byte[] buffer);
 
