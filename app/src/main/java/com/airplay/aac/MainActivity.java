@@ -35,6 +35,36 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 initFdk();
+
+
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Thread.sleep(300);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+
+                        for (int i = 1; i < 654; i++) {
+                            InputStream inputStream = getAssetsStream("audio/dump"+i+".aac");
+                            try {
+                                byte[] buffer = new byte[4096 * 4];
+                                int num;
+                                while ((num = inputStream.read(buffer)) != -1) {
+                                    Log.d("faac", "read: " + num);
+                                    decodeFdk(buffer, num);
+                                    Thread.sleep(10);
+                                }
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    }
+                }).start();
+
             }
         }, 1000);
 
@@ -114,5 +144,7 @@ public class MainActivity extends Activity {
     public native void addPacket(byte[] buffer);
 
     public native void initFdk();
+
+    public native void decodeFdk(byte[] buffer, int num);
 
 }
