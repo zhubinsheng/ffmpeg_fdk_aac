@@ -1,4 +1,4 @@
-# ffmpeg_fdk_aac
+# ffmpeg_fdk_aac for android armv8
 todo: push maven
 
 use ffmpeg5.0.2 docode aac/mp3 success
